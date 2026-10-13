@@ -3,6 +3,7 @@ pipeline {
  environment {
   IMAGE_BASE = 'skala-registry.skala-ai.com/class-9/sk301-webserver'
   K8S_NAMESPACE = 'class-9'
+  KUBECONFIG = '/root/.kube/config'
  }
  options { disableConcurrentBuilds(); timestamps(); timeout(time: 20, unit: 'MINUTES') }
  stages {
