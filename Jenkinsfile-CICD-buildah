@@ -49,6 +49,7 @@ pipeline {
           passwordVariable: 'REG_PASS'
         )]) {
         sh '''
+            set +x
             set -eu
             REG_HOST="${IMAGE_REGISTRY_URL}"
             IMAGE_REF="${IMAGE_REGISTRY_URL}/${IMAGE_REGISTRY_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}-${BUILD_NUMBER}"
@@ -56,6 +57,7 @@ pipeline {
             # 1. 로그인
             echo "Login to $REG_HOST as $REG_USER"
             AUTHFILE=$(mktemp)
+            printf '{}\n' > "$AUTHFILE"
             trap 'rm -f "$AUTHFILE"' EXIT
             echo "$REG_PASS" | buildah login --authfile "$AUTHFILE" -u "$REG_USER" --password-stdin "$REG_HOST"
 
@@ -74,7 +76,8 @@ pipeline {
     stage('Update K8s Manifests') {
       steps {
         sh '''
-          set -eu
+          set +x
+            set -eu
           test -d ./kustomize/overlays/dev
           cd ./kustomize/overlays/dev
 
@@ -95,7 +98,8 @@ pipeline {
     stage('Deploy to Kubernetes') {
       steps {
         sh '''
-          set -eu
+          set +x
+            set -eu
 
           FINAL_IMAGE_TAG="${IMAGE_TAG}-${BUILD_NUMBER}"
           IMAGE_BASE="${IMAGE_REGISTRY_URL}/${IMAGE_REGISTRY_PROJECT}/${IMAGE_NAME}"
