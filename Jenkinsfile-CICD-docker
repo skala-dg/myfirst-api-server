@@ -1,0 +1,52 @@
+pipeline {
+ agent any
+ environment {
+  IMAGE_BASE = 'skala-registry.skala-ai.com/class-9/sk301-webserver'
+  K8S_NAMESPACE = 'class-9'
+ }
+ options { disableConcurrentBuilds(); timestamps(); timeout(time: 20, unit: 'MINUTES') }
+ stages {
+  stage('Clone Repository') {
+   steps { git branch: 'main', url: 'https://github.com/skala-dg/myfirst-api-server.git', credentialsId: 'skala-github-id' }
+  }
+  stage('Build with Maven') {
+   steps { sh 'mvn -B clean package -DskipTests' }
+  }
+  stage('Image Build & Push (BuildKit)') {
+   steps {
+    withCredentials([usernamePassword(credentialsId: 'skala-image-registry-id', usernameVariable: 'REG_USER', passwordVariable: 'REG_PASS')]) {
+     sh '''
+      set -eu
+      set +x
+      export DOCKER_CONFIG=$(mktemp -d)
+      trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+      echo "$REG_PASS" | docker login -u "$REG_USER" --password-stdin skala-registry.skala-ai.com
+      docker buildx build --platform linux/amd64 -t "$IMAGE_BASE:1.0-$BUILD_NUMBER" -t "$IMAGE_BASE:1.0" --push .
+     '''
+    }
+   }
+  }
+  stage('Update K8s Manifests') {
+   steps {
+    sh '''
+     set -eu
+     cd kustomize/overlays/dev
+     kustomize edit set image "$IMAGE_BASE=$IMAGE_BASE:1.0-$BUILD_NUMBER"
+     kustomize build . > ../../../sk301-rendered.yaml
+     grep 'namespace: class-9' ../../../sk301-rendered.yaml
+    '''
+   }
+  }
+  stage('Deploy to Kubernetes') {
+   steps {
+    sh '''
+     set -eu
+     kubectl apply -n class-9 -f sk301-rendered.yaml
+     kubectl rollout status deployment/sk301-myfirst-api-server -n class-9 --timeout=180s
+     kubectl get pods -n class-9 -l app=sk301-myfirst-api-server
+    '''
+    archiveArtifacts artifacts: 'sk301-rendered.yaml', fingerprint: true
+   }
+  }
+ }
+}
